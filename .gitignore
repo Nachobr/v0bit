@@ -1,0 +1,22 @@
+# Dependencies
+**/node_modules
+**/.pnp
+**/.pnp.js
+
+# Build outputs
+**/build
+**/.next
+**/out
+
+# Misc
+**/.DS_Store
+**/*.pem
+**/logs
+**/*.log
+
+# Environment variables
+**/.env*
+
+# TypeScript
+**/*.tsbuildinfo
+**/next-env.d.ts
