@@ -6,69 +6,71 @@ const port = 3000;
 // Middleware to parse JSON bodies
 app.use(express.json());
 
-// Mock Grok API function (since no real API exists yet)
-const mockGrokResponse = async (prompt) => {
-  console.log(`Processing prompt with Grok: ${prompt}`);
-  // Simulate Grok interpreting the prompt and returning a refined version
-  return `Generate a React app: ${prompt}`;
+// Twitter API credentials
+const TWITTER_BEARER_TOKEN = process.env.TWITTER_BEARER_TOKEN;
+
+// Vercel API credentials
+const VERCEL_API_TOKEN = process.env.VERCEL_API_TOKEN;
+const VERCEL_V0_URL = 'https://api.vercel.com/v0/generate';
+
+// Function to call Vercel API to generate and deploy the app
+const generateAndDeployApp = async (prompt) => {
+  try {
+    const response = await axios.post(VERCEL_V0_URL, { prompt }, {
+      headers: {
+        'Authorization': `Bearer ${VERCEL_API_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    return response.data.url; // Assuming the API returns the deployed app URL
+  } catch (error) {
+    console.error('Error generating app:', error.response?.data || error.message);
+    throw error;
+  }
 };
 
-// Placeholder Vercel @v0 endpoint (hypothetical)
-const VERCEL_V0_URL = 'https://v0.vercel.com/generate';
+// Function to reply to a tweet with the deployed app URL
+const replyToTweet = async (tweetId, userHandle, appUrl) => {
+  try {
+    const response = await axios.post(`https://api.twitter.com/2/tweets`, {
+      text: `@${userHandle} Your app is ready: ${appUrl}`,
+      in_reply_to_status_id: tweetId
+    }, {
+      headers: {
+        'Authorization': `Bearer ${TWITTER_BEARER_TOKEN}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error replying to tweet:', error.response?.data || error.message);
+    throw error;
+  }
+};
 
-// Bot endpoint to handle prompts
-app.post('/generate', async (req, res) => {
-  const { prompt } = req.body;
+// Twitter webhook endpoint to receive mentions
+app.post('/twitter-webhook', async (req, res) => {
+  const { tweet_text, tweet_id, user_handle } = req.body;
 
-  if (!prompt) {
-    return res.status(400).json({ error: 'Prompt is required' });
+  if (!tweet_text) {
+    return res.status(400).json({ error: 'Tweet text is required' });
   }
 
   try {
-    // Step 1: Send prompt to Grok (mocked)
-    const grokResult = await mockGrokResponse(prompt);
-    console.log(`Grok result: ${grokResult}`);
+    // Generate and deploy the app
+    const appUrl = await generateAndDeployApp(tweet_text);
 
-    // Step 2: Pass result to Vercel @v0 with query parameter (as per Goncy's suggestion)
-    const redirectUrl = `${VERCEL_V0_URL}?prompt=${encodeURIComponent(grokResult)}`;
-    console.log(`Redirecting to: ${redirectUrl}`);
+    // Reply to the tweet with the app URL
+    await replyToTweet(tweet_id, user_handle, appUrl);
 
-    // Step 3: Simulate redirect (since we can't actually trigger @v0 here)
-    // In a real scenario, @v0 would generate and return a deployed app URL
-    const simulatedAppUrl = `https://generated-app-${Date.now()}.vercel.app`;
-    
-    res.json({
-      message: 'Generation triggered',
-      redirectUrl: redirectUrl,
-      appUrl: simulatedAppUrl // Mocked response
-    });
+    res.json({ success: true, appUrl });
   } catch (error) {
-    console.error('Error in bot:', error);
-    res.status(500).json({ error: 'Failed to generate app' });
+    console.error('Error processing Twitter mention:', error);
+    res.status(500).json({ error: 'Failed to process tweet' });
   }
 });
 
 // Start the server
- 
-//app.listen(port, () => {
-  //console.log(`Bot server running at http://localhost:${port}`);
-//});
-
-// Example usage via command line (optional CLI mode)
-const runCLI = async () => {
-  const readline = require('readline').createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
-
-  readline.question('Enter your prompt: ', async (prompt) => {
-    const grokResult = await mockGrokResponse(prompt);
-    const redirectUrl = `${VERCEL_V0_URL}?prompt=${encodeURIComponent(grokResult)}`;
-    console.log(`Would redirect to: ${redirectUrl}`);
-    console.log(`Simulated app URL: https://generated-app-${Date.now()}.vercel.app`);
-    readline.close();
-  });
-};
-
-// Uncomment to run in CLI mode instead of server
-runCLI();
+app.listen(port, () => {
+  console.log(`Bot server running at http://localhost:${port}`);
+});
